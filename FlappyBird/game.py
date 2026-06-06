@@ -26,11 +26,13 @@ class Game:
         self.clock = pygame.time.Clock()
         
         # Load Assets
-        self.bg = pygame.image.load("flappybirdbg.png")
+        self.bg = pygame.transform.scale(pygame.image.load("flappybirdbg.png"), (WIDTH, HEIGHT))
         self.logo = pygame.transform.scale(pygame.image.load("logo.png"), (400, 200))
         self.bird_img = pygame.transform.scale(pygame.image.load("flappybird.png"), (34, 24))
         self.top_pipe_img = pygame.transform.scale(pygame.image.load("toppipe.png"), (64, 512))
         self.bottom_pipe_img = pygame.transform.scale(pygame.image.load("bottompipe.png"), (64, 512))
+        self.secret_img = pygame.image.load("Bubbles-HSR.png").convert_alpha()
+        self.secret_img = pygame.transform.scale(self.secret_img, (200, 150))
         
         self.jump_sound, self.hit_sound, self.point_sound = [pygame.mixer.Sound(f"{s}.mp3") for s in ["jump", "hit", "point"]]
         self.font_big, self.font_small = pygame.font.Font("Font.ttf", 32), pygame.font.Font("Font.ttf", 16)
@@ -39,17 +41,22 @@ class Game:
         self.state = "MENU"
         self.CREATE_PIPE = pygame.USEREVENT
         pygame.time.set_timer(self.CREATE_PIPE, 1500)
+        
+        #Konami Code
+        self.konami_code = [pygame.K_UP, pygame.K_UP, pygame.K_DOWN, pygame.K_DOWN, 
+                            pygame.K_LEFT, pygame.K_RIGHT, pygame.K_LEFT, pygame.K_RIGHT, 
+                            pygame.K_b, pygame.K_a]
+        self.input_sequence = []
+        self.god_mode = False 
+        
         self.reset()
 
     def load_high_score(self):
-        try:
-            return int(open("highscore.txt").read())
-        except:
-            return 0
+        try: return int(open("highscore.txt").read())
+        except: return 0
 
     def save_high_score(self):
-        with open("highscore.txt", "w") as f:
-            f.write(str(int(self.high_score)))
+        with open("highscore.txt", "w") as f: f.write(str(int(self.high_score)))
 
     def reset(self):
         self.bird, self.pipes, self.score = Bird(self.bird_img), [], 0
@@ -69,9 +76,10 @@ class Game:
             if not p['passed'] and self.bird.rect.left > p['rect'].right:
                 self.score += 0.5
                 p['passed'] = True
-                if p['type'] == 'bottom':
-                    self.point_sound.play()
-            if self.bird.rect.colliderect(p['rect']): self.game_over()
+                if p['type'] == 'bottom': self.point_sound.play()
+            
+            if not self.god_mode and self.bird.rect.colliderect(p['rect']): 
+                self.game_over()
         
         self.pipes = [p for p in self.pipes if p['rect'].right > 0]
 
@@ -92,6 +100,10 @@ class Game:
             self.bird.draw(self.window)
             self.blit_text(int(self.score), (WIDTH // 2, 50), self.font_big, center=True)
             
+            if self.god_mode:
+                img_rect = self.secret_img.get_rect(center=(WIDTH // 2, 60))
+                self.window.blit(self.secret_img, img_rect)
+
             if self.state == "PAUSE":
                 self.blit_text("TẠM DỪNG", (WIDTH // 2, HEIGHT // 2), self.font_big, center=True)
             elif self.state == "GAME_OVER":
@@ -106,19 +118,16 @@ class Game:
                 if e.type == pygame.QUIT: exit()
                 if e.type == self.CREATE_PIPE and self.state == "PLAYING":
                     y = -random.randint(100, 300)
-                    self.pipes.append({
-                        'rect': self.top_pipe_img.get_rect(topleft=(WIDTH, y)),
-                        'img': self.top_pipe_img,
-                        'type': 'top',
-                        'passed': False
-                    })
-                    self.pipes.append({
-                        'rect': self.bottom_pipe_img.get_rect(topleft=(WIDTH, y + 512 + PIPE_GAP)),
-                        'img': self.bottom_pipe_img,
-                        'type': 'bottom',
-                        'passed': False
-                    })
+                    self.pipes.append({'rect': self.top_pipe_img.get_rect(topleft=(WIDTH, y)), 'img': self.top_pipe_img, 'type': 'top', 'passed': False})
+                    self.pipes.append({'rect': self.bottom_pipe_img.get_rect(topleft=(WIDTH, y + 512 + PIPE_GAP)), 'img': self.bottom_pipe_img, 'type': 'bottom', 'passed': False})
+                
                 if e.type == pygame.KEYDOWN:
+                    self.input_sequence.append(e.key)
+                    self.input_sequence = self.input_sequence[-len(self.konami_code):]
+                    if self.input_sequence == self.konami_code:
+                        self.god_mode = not self.god_mode 
+                        self.input_sequence = []
+
                     if e.key == pygame.K_SPACE:
                         if self.state == "PLAYING":
                             self.bird.velocity = JUMP_FORCE
@@ -126,6 +135,7 @@ class Game:
                         else: self.reset(); self.state = "PLAYING"
                     if e.key == pygame.K_p and self.state in ["PLAYING", "PAUSE"]:
                         self.state = "PAUSE" if self.state == "PLAYING" else "PLAYING"
+            
             self.update(); self.draw(); self.clock.tick(60)
 
-if __name__ == "__main__": Game().run() 
+if __name__ == "__main__": Game().run()
